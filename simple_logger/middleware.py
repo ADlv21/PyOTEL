@@ -54,7 +54,7 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         self.log_headers = log_headers
         self.log_cookies = log_cookies
         self.log_format = log_format
-        self.log_function = log_function or self._default_log_function
+        self.log_function = log_function or api_log_function  # Use the API log function by default
 
     async def dispatch(self, request: Request, call_next):
         # Check if this path/method should be excluded
