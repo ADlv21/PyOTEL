@@ -6,9 +6,14 @@ import asyncio
 import builtins
 import functools
 import contextvars
-import aiohttp
+import requests
 import json
-from typing import Optional, Callable, Any, TypeVar, cast
+import logging
+import threading
+import time
+from typing import Optional, Callable, Any, TypeVar, cast, List, Dict
+from collections import defaultdict
+from datetime import datetime, timedelta
 
 # Context var for trace ID
 trace_id_var = contextvars.ContextVar("trace_id", default=None)
@@ -16,26 +21,92 @@ trace_id_var = contextvars.ContextVar("trace_id", default=None)
 # Store the original print function
 original_print = builtins.print
 
-async def send_to_api(message: str, trace_id: Optional[str] = None):
-    """Send a message to the API endpoint."""
-    async with aiohttp.ClientSession() as session:
+# Global variables for batching
+log_queue = defaultdict(list)
+last_flush = time.time()
+BATCH_INTERVAL = 0.5  # seconds
+MAX_BATCH_SIZE = 10
+flush_thread = None
+lock = threading.Lock()
+
+def _flush_logs():
+    """Flush logs from the queue to the API."""
+    global last_flush
+    while True:
         try:
-            payload = {
-                "data": json.dumps({
-                    "message": message,
-                    "trace_id": trace_id,
-                    "type": "print"
-                })
-            }
-            async with session.post(
-                "https://67e5456d18194932a585555c.mockapi.io/ee",
-                json=payload,
-                headers={"Content-Type": "application/json"}
-            ) as response:
-                if not response.ok:
-                    original_print(f"Failed to send print to API. Status: {response.status}")
+            current_time = time.time()
+            if current_time - last_flush >= BATCH_INTERVAL:
+                with lock:
+                    for trace_id, logs in list(log_queue.items()):
+                        if logs:
+                            try:
+                                payload = {
+                                    "data": json.dumps({
+                                        "messages": logs,
+                                        "trace_id": trace_id,
+                                        "type": "batch",
+                                        "timestamp": datetime.now().isoformat()
+                                    })
+                                }
+                                
+                                # Fire and forget - use a separate thread
+                                def send_request():
+                                    try:
+                                        requests.post(
+                                            "https://67e5456d18194932a585555c.mockapi.io/ee",
+                                            json=payload,
+                                            headers={"Content-Type": "application/json"},
+                                            timeout=1.0
+                                        )
+                                    except Exception:
+                                        pass  # Ignore all errors
+                                
+                                threading.Thread(target=send_request, daemon=True).start()
+                                log_queue[trace_id] = []
+                            except Exception as e:
+                                logging.error(f"Error sending logs to API: {str(e)}")
+                    last_flush = current_time
+            time.sleep(0.1)  # Small sleep to prevent CPU spinning
         except Exception as e:
-            original_print(f"Error sending print to API: {str(e)}")
+            logging.error(f"Error in flush thread: {str(e)}")
+
+def send_to_api(message: str, trace_id: Optional[str] = None, log_type: str = "print"):
+    """Send a message to the API endpoint using batching."""
+    global flush_thread
+    
+    # Start the flush thread if it's not running
+    if flush_thread is None or not flush_thread.is_alive():
+        flush_thread = threading.Thread(target=_flush_logs, daemon=True)
+        flush_thread.start()
+    
+    # Add message to queue
+    trace_id = trace_id or "default"
+    with lock:
+        log_queue[trace_id].append({
+            "message": message,
+            "type": log_type,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # If queue size exceeds max batch size, trigger immediate flush
+        if len(log_queue[trace_id]) >= MAX_BATCH_SIZE:
+            threading.Thread(target=_flush_logs, daemon=True).start()
+
+class APILogHandler(logging.Handler):
+    """Custom logging handler that sends logs to the API."""
+    def __init__(self):
+        super().__init__()
+        self.setFormatter(logging.Formatter('%(message)s'))
+
+    def emit(self, record):
+        """Emit a record to the API."""
+        try:
+            trace_id = trace_id_var.get()
+            message = self.format(record)
+            send_to_api(message, trace_id, "log")
+        except Exception as e:
+            logging.error(f"Error in APILogHandler: {str(e)}")
+            self.handleError(record)
 
 def traced_print(*args, **kwargs):
     """Print function that prepends the current trace ID if available and sends to API."""
@@ -48,22 +119,17 @@ def traced_print(*args, **kwargs):
     else:
         original_print(*args, **kwargs)
     
-    # Send to API
-    try:
-        # Try to get the running event loop
-        loop = asyncio.get_running_loop()
-        # If we have a running loop, create a task
-        asyncio.create_task(send_to_api(message, trace_id))
-    except RuntimeError:
-        # If no running loop, create a new one and run the coroutine
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(send_to_api(message, trace_id))
-        loop.close()
+    # Send to API using batching
+    send_to_api(message, trace_id, "print")
 
 def setup_traced_print():
-    """Set up the print function to include trace IDs."""
+    """Set up the print function to include trace IDs and send to API."""
     builtins.print = traced_print
+    
+    # Add API handler to root logger
+    root_logger = logging.getLogger()
+    api_handler = APILogHandler()
+    root_logger.addHandler(api_handler)
 
 def get_trace_id() -> Optional[str]:
     """Get the current trace ID from the context."""

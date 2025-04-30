@@ -1,5 +1,17 @@
+import logging
 from fastapi import FastAPI
 from simple_logger import SimpleLogger
+
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('myapp.log'),
+        logging.StreamHandler()
+    ]
+)
 
 # Create a FastAPI app
 app = FastAPI()
@@ -11,5 +23,7 @@ app = SimpleLogger(
 
 @app.get("/")
 def root():
+    logger.info('Started')
+    logger.info('Finished')
     print("Inside root endpoint")  # This print will include the trace ID
     return {"message": "Hello World"}
