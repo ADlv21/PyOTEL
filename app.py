@@ -1,3 +1,6 @@
+"""
+Original FastAPI app used for reference
+"""
 import builtins
 import time
 import uuid
@@ -13,6 +16,18 @@ trace_id_var = contextvars.ContextVar("trace_id", default=None)
 original_print = builtins.print
 
 def traced_print(*args, **kwargs):
+    """
+    Print function that prepends the current trace ID if available.
+    
+    This function is a wrapper around the built-in print function that adds
+    trace ID context to printed messages. If a trace ID is set in the current
+    context, it will be prepended to the message in the format [trace_id: <id>].
+    If no trace ID is set, the message will be printed as-is.
+    
+    Args:
+        *args: Variable length argument list to be printed
+        **kwargs: Arbitrary keyword arguments passed to the print function
+    """
     trace_id = trace_id_var.get()
     if trace_id:
         original_print(f"[trace_id: {trace_id}]", *args, **kwargs)
@@ -27,11 +42,11 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next):
-        
+
         ip = request.client.host
         user_agent = request.headers.get("user-agent", "unknown")
         cookies = dict(request.cookies)
-        
+
         trace_id = str(uuid.uuid4())
         trace_id_var.set(trace_id)
 

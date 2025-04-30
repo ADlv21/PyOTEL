@@ -2,10 +2,10 @@
 Context management for trace IDs and related functionality.
 """
 
-import builtins
-import contextvars
-import functools
 import asyncio
+import builtins
+import functools
+import contextvars
 from typing import Optional, Callable, Any, TypeVar, cast
 
 # Context var for trace ID
@@ -18,7 +18,7 @@ def traced_print(*args, **kwargs):
     """Print function that prepends the current trace ID if available."""
     trace_id = trace_id_var.get()
     if trace_id:
-        original_print(f"[trace_id: {trace_id}]", *args, **kwargs)
+        original_print("[trace_id: %s]", trace_id, *args, **kwargs)
     else:
         original_print(*args, **kwargs)
 

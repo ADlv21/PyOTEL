@@ -22,20 +22,20 @@ def custom_logger(log_data):
     path = log_data.get("path", "")
     status = log_data.get("status_code", 0)
     duration = log_data.get("duration_ms", 0)
-    
+
     # Add trace ID as extra data for the log record
     extra = {"trace_id": trace_id}
-    
+
     # Log with different levels based on status code
     if status < 400:
-        logger.info(f"{method} {path} - {status} ({duration}ms)", extra=extra)
+        logger.info("%s %s - %d (%dms)", method, path, status, duration, extra=extra)
     elif status < 500:
-        logger.warning(f"{method} {path} - {status} ({duration}ms)", extra=extra)
+        logger.warning("%s %s - %d (%dms)", method, path, status, duration, extra=extra)
     else:
-        logger.error(f"{method} {path} - {status} ({duration}ms)", extra=extra)
-        
+        logger.error("%s %s - %d (%dms)", method, path, status, duration, extra=extra)
+
     # Additionally log the full data at debug level
-    logger.debug(f"Full request data: {log_data}", extra=extra)
+    logger.debug("Full request data: %s", log_data, extra=extra)
 
 # Create a FastAPI app
 app = FastAPI()
@@ -62,7 +62,7 @@ app = SimpleLogger(
     log_function=custom_logger,
     exclude_paths=["/health", "/metrics"],
     exclude_methods=["OPTIONS"],
-    log_request_body=True,
+    log_request_body=False,
     log_headers=False,  # Don't log headers for privacy
     log_cookies=False,  # Don't log cookies for privacy
 )(app)
@@ -81,7 +81,7 @@ async def add_custom_header(request: Request, call_next):
     response.headers["X-App-Version"] = "1.0.0"
     
     # We can use the trace ID here too
-    logger.info(f"Added custom header to response", extra={"trace_id": current_trace_id})
+    logger.info("Added custom header to response", extra={"trace_id": current_trace_id})
     
     return response
 
@@ -89,7 +89,7 @@ async def add_custom_header(request: Request, call_next):
 def root():
     """Root endpoint."""
     trace_id = get_trace_id()
-    logger.info(f"Root endpoint accessed", extra={"trace_id": trace_id})
+    logger.info("Root endpoint accessed", extra={"trace_id": trace_id})
     return {"message": "Advanced example", "trace_id": trace_id}
 
 @app.get("/error")
