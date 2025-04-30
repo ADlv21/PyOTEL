@@ -62,10 +62,11 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         body = None
         if self.log_request_body:
             try:
-                body_bytes = await request.body()
-                body = body_bytes.decode("utf-8") if body_bytes else None
-                # Reset body to be read again by the route handlers
-                await request._receive()
+                # FIXED: Don't attempt to read the body
+                # This was causing issues with FastAPI's request handling
+                # body_bytes = await request.body()
+                # body = body_bytes.decode("utf-8") if body_bytes else None
+                body = "<body reading disabled>"
             except Exception as e:
                 body = f"Error reading body: {str(e)}"
 
@@ -161,7 +162,7 @@ class SimpleLogger:
         self,
         exclude_paths: Optional[list] = None,
         exclude_methods: Optional[list] = None,
-        log_request_body: bool = True,
+        log_request_body: bool = False,
         log_headers: bool = True,
         log_cookies: bool = True,
         log_format: str = "json",
@@ -196,24 +197,8 @@ class SimpleLogger:
             log_function=self.log_function
         )
         
-        # If this is a FastAPI app, use the add_middleware method
         if isinstance(app, FastAPI):
-            new_app = FastAPI(
-                title=getattr(app, "title", "FastAPI"),
-                description=getattr(app, "description", ""),
-                version=getattr(app, "version", "0.1.0"),
-                openapi_url=getattr(app, "openapi_url", "/openapi.json"),
-                docs_url=getattr(app, "docs_url", "/docs"),
-                redoc_url=getattr(app, "redoc_url", "/redoc"),
-            )
-            
-            # Copy all routes and middleware from the original app
-            new_app.router = app.router
-            for middleware in app.user_middleware:
-                new_app.add_middleware(middleware.__class__, **middleware.options)
-                
-            # Add our middleware
-            new_app.add_middleware(SimpleLoggerMiddleware, 
+            app.add_middleware(SimpleLoggerMiddleware, 
                 exclude_paths=self.exclude_paths,
                 exclude_methods=self.exclude_methods,
                 log_request_body=self.log_request_body,
@@ -222,7 +207,7 @@ class SimpleLogger:
                 log_format=self.log_format,
                 log_function=self.log_function
             )
-            return new_app
+            return app
         
         # Otherwise, just return the middleware that wraps the app
         return middleware

@@ -5,11 +5,11 @@ Setup script for simple_logger package.
 from setuptools import setup, find_packages
 
 setup(
-    name="simple-logger",
+    name="pyotel",
     version="0.1.0",
     description="A simple request/response logger with trace ID propagation for FastAPI",
-    author="Your Name",
-    author_email="your.email@example.com",
+    author="ADv8",
+    author_email="adwaitg02@gmail.com",
     packages=find_packages(),
     install_requires=[
         "fastapi>=0.68.0",
