@@ -149,7 +149,7 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
             path = log_data.get("path")
             status = log_data.get("status_code")
             duration = log_data.get("duration_ms")
-            print("[%s] %s %s - %d (%dms)", trace_id, method, path, status, duration)
+            print(f"[trace_id: {trace_id}] [{trace_id}] {method} {path} - {status} ({duration}ms)")
 
 
 class SimpleLogger:

@@ -40,33 +40,6 @@ def custom_logger(log_data):
 # Create a FastAPI app
 app = FastAPI()
 
-# Create a custom middleware class for additional functionality
-class CustomMiddleware:
-    def __init__(self, app):
-        self.app = app
-        
-    async def __call__(self, scope, receive, send):
-        # Custom ASGI middleware functionality
-        if scope["type"] != "http":
-            return await self.app(scope, receive, send)
-        
-        # You could add custom logic here before the request
-        return await self.app(scope, receive, send)
-
-# Wrap the app with our middleware first
-app = CustomMiddleware(app)
-
-# Now wrap with SimpleLogger with custom configuration
-app = SimpleLogger(
-    log_format="custom",  # We're using a custom logger
-    log_function=custom_logger,
-    exclude_paths=["/health", "/metrics"],
-    exclude_methods=["OPTIONS"],
-    log_request_body=False,
-    log_headers=False,  # Don't log headers for privacy
-    log_cookies=False,  # Don't log cookies for privacy
-)(app)
-
 # Add a custom middleware that demonstrates trace ID access
 @app.middleware("http")
 async def add_custom_header(request: Request, call_next):
@@ -112,6 +85,33 @@ async def function_level_2():
     """Second level function."""
     logger.info("In function level 2", extra={"trace_id": get_trace_id()})
     return {"message": "Nested functions with trace ID propagation", "trace_id": get_trace_id()}
+
+# Create a custom middleware class for additional functionality
+class CustomMiddleware:
+    def __init__(self, app):
+        self.app = app
+        
+    async def __call__(self, scope, receive, send):
+        # Custom ASGI middleware functionality
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        
+        # You could add custom logic here before the request
+        return await self.app(scope, receive, send)
+
+# Wrap the app with our middleware first
+app = CustomMiddleware(app)
+
+# Now wrap with SimpleLogger with custom configuration
+app = SimpleLogger(
+    log_format="custom",  # We're using a custom logger
+    log_function=custom_logger,
+    exclude_paths=["/health", "/metrics"],
+    exclude_methods=["OPTIONS"],
+    log_request_body=False,
+    log_headers=False,  # Don't log headers for privacy
+    log_cookies=False,  # Don't log cookies for privacy
+)(app)
 
 if __name__ == "__main__":
     import uvicorn

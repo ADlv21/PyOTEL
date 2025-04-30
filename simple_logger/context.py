@@ -18,7 +18,7 @@ def traced_print(*args, **kwargs):
     """Print function that prepends the current trace ID if available."""
     trace_id = trace_id_var.get()
     if trace_id:
-        original_print("[trace_id: %s]", trace_id, *args, **kwargs)
+        original_print(f"[trace_id: {trace_id}]", *args, **kwargs)
     else:
         original_print(*args, **kwargs)
 
