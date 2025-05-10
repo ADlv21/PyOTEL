@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, Callable, Union
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from .context import trace_id_var, setup_traced_print
+from .context import trace_id_var, setup_traced_print, set_middleware_active
 
 async def api_log_function(log_data: Dict[str, Any]):
     """Custom logging function that sends data to an API endpoint."""
@@ -23,7 +23,7 @@ async def api_log_function(log_data: Dict[str, Any]):
             payload = {"data": data_str}
             
             async with session.post(
-                "https://67e5456d18194932a585555c.mockapi.io/ee",
+                "http://0.0.0.0:8080",
                 json=payload,
                 headers={"Content-Type": "application/json"}
             ) as response:
@@ -54,12 +54,15 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         self.log_headers = log_headers
         self.log_cookies = log_cookies
         self.log_format = log_format
-        self.log_function = log_function or api_log_function  # Use the API log function by default
+        self.log_function = log_function or api_log_function  # Use API log function by default
 
     async def dispatch(self, request: Request, call_next):
         # Check if this path/method should be excluded
         if request.url.path in self.exclude_paths or request.method in self.exclude_methods:
             return await call_next(request)
+
+        # Mark that middleware is active to prevent duplicate logging
+        set_middleware_active(True)
 
         ip = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
@@ -91,6 +94,8 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
                 trace_id, method, path, query_params, headers, body, 
                 500, duration, ip, user_agent, cookies, str(e)
             )
+            # Reset middleware active flag
+            set_middleware_active(False)
             raise
 
         duration = round((time.time() - start_time) * 1000, 2)
@@ -100,6 +105,9 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
 
         await self._log_request(trace_id, method, path, query_params, headers, body, status_code, duration, ip, user_agent, cookies)
 
+        # Reset middleware active flag
+        set_middleware_active(False)
+        
         return response
 
     async def _log_request(
@@ -196,7 +204,7 @@ class SimpleLogger:
         self.log_headers = log_headers
         self.log_cookies = log_cookies
         self.log_format = log_format
-        self.log_function = log_function or api_log_function  # Use the API log function by default
+        self.log_function = log_function or api_log_function  # Use API log function by default
         self.patch_print = patch_print
 
         # Set up the print function patching

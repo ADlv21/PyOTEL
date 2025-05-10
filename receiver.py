@@ -10,6 +10,7 @@ def root():
 @app.post("/")
 async def receive(request: Request):
     print(await request.json())
+    print('Request received')
     return {"message": "Hello World"}
 
 if __name__ == "__main__":

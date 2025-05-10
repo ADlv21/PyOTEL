@@ -18,6 +18,9 @@ from datetime import datetime, timedelta
 # Context var for trace ID
 trace_id_var = contextvars.ContextVar("trace_id", default=None)
 
+# Context var to track if middleware is handling the request
+middleware_active = contextvars.ContextVar("middleware_active", default=False)
+
 # Store the original print function
 original_print = builtins.print
 
@@ -72,6 +75,10 @@ def _flush_logs():
 
 def send_to_api(message: str, trace_id: Optional[str] = None, log_type: str = "print"):
     """Send a message to the API endpoint using batching."""
+    # Temporarily disable this check to fix the issue
+    # if middleware_active.get():
+    #     return
+        
     global flush_thread
     
     # Start the flush thread if it's not running
@@ -138,6 +145,10 @@ def get_trace_id() -> Optional[str]:
 def set_trace_id(trace_id: str) -> None:
     """Set the trace ID in the current context."""
     trace_id_var.set(trace_id)
+
+def set_middleware_active(active: bool = True) -> None:
+    """Set whether middleware is currently handling the request."""
+    middleware_active.set(active)
 
 # Generic type for function return
 T = TypeVar('T')
