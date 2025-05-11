@@ -1,16 +1,14 @@
 from fastapi import FastAPI, Request
 import uvicorn
-
+import json
 app = FastAPI()
 
-@app.get("/")
-def root():
-    return {"message": "Hello World"}
 
 @app.post("/")
 async def receive(request: Request):
-    print(await request.json())
-    print('Request received')
+    data = await request.json()
+    with open('data.json', 'a') as f:
+        f.write(json.dumps(data))
     return {"message": "Hello World"}
 
 if __name__ == "__main__":

@@ -18,9 +18,7 @@ async def api_log_function(log_data: Dict[str, Any]):
     """Custom logging function that sends data to an API endpoint."""
     async with aiohttp.ClientSession() as session:
         try:
-            # Convert the entire log data to string
-            data_str = json.dumps(log_data)
-            payload = {"data": data_str}
+            payload = {"data": log_data}
             
             async with session.post(
                 "http://0.0.0.0:8080",

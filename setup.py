@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="pyotel",
-    version="0.1.0",
+    version="0.1.2",
     description="A simple request/response logger with trace ID propagation for FastAPI",
     author="ADv8",
     author_email="adwaitg02@gmail.com",
@@ -14,6 +14,8 @@ setup(
     install_requires=[
         "fastapi>=0.68.0",
         "starlette>=0.14.2",
+        "aiohttp",
+        "requests"
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",
