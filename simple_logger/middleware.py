@@ -7,28 +7,50 @@ import uuid
 import json
 import aiohttp
 import asyncio
+import threading
 from fastapi import FastAPI, Request
 from typing import Optional, Dict, Any, Callable, Union
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+import logging
 
 from .context import trace_id_var, setup_traced_print, set_middleware_active
 
-async def api_log_function(log_data: Dict[str, Any]):
-    """Custom logging function that sends data to an API endpoint."""
-    async with aiohttp.ClientSession() as session:
+def api_log_function(log_data: Dict[str, Any]):
+    """Custom logging function that sends data to an API endpoint without waiting for response."""
+    def _send_log_async():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            payload = {"data": log_data}
+            async def _send():
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        payload = {"data": log_data}
+                        try:
+                            async with session.post(
+                                "http://0.0.0.0:8080",
+                                json=payload,
+                                headers={"Content-Type": "application/json"},
+                                timeout=2.0
+                            ) as _:
+                                pass  # Don't wait for or process the response
+                        except Exception as e:
+                            # Just log the error, don't propagate it
+                            logging.error(f"Error sending log to API: {str(e)}")
+                except Exception as e:
+                    # Catch all exceptions to ensure thread doesn't crash
+                    logging.error(f"Unexpected error in log sender thread: {str(e)}")
             
-            async with session.post(
-                "http://0.0.0.0:8080",
-                json=payload,
-                headers={"Content-Type": "application/json"}
-            ) as response:
-                if not response.ok:
-                    print(f"Failed to send log to API. Status: {response.status}")
+            loop.run_until_complete(_send())
         except Exception as e:
-            print(f"Error sending log to API: {str(e)}")
+            logging.error(f"Error in log sender thread: {str(e)}")
+        finally:
+            loop.close()
+    
+    # Start a new thread to handle the async sending
+    thread = threading.Thread(target=_send_log_async, daemon=True)
+    thread.start()
+    # Don't wait for thread to complete
 
 class SimpleLoggerMiddleware(BaseHTTPMiddleware):
     """
@@ -88,7 +110,8 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
             status_code = response.status_code
         except Exception as e:
             duration = round((time.time() - start_time) * 1000, 2)
-            await self._log_error(
+            # Log the error but don't wait for the logging to complete
+            self._log_error(
                 trace_id, method, path, query_params, headers, body, 
                 500, duration, ip, user_agent, cookies, str(e)
             )
@@ -101,14 +124,15 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         # Add trace ID to response headers
         response.headers["X-Trace-Id"] = trace_id
 
-        await self._log_request(trace_id, method, path, query_params, headers, body, status_code, duration, ip, user_agent, cookies)
+        # Log the request but don't wait for the logging to complete
+        self._log_request(trace_id, method, path, query_params, headers, body, status_code, duration, ip, user_agent, cookies)
 
         # Reset middleware active flag
         set_middleware_active(False)
         
         return response
 
-    async def _log_request(
+    def _log_request(
         self, trace_id, method, path, query_params, headers, body, 
         status_code, duration, ip, user_agent, cookies
     ):
@@ -133,12 +157,18 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         if self.log_request_body and body:
             log_data["body"] = body
 
-        if asyncio.iscoroutinefunction(self.log_function):
-            await self.log_function(log_data)
-        else:
-            self.log_function(log_data)
+        try:
+            # Don't use await here - we want this to run without blocking
+            if asyncio.iscoroutinefunction(self.log_function):
+                # Create a task but don't wait for it
+                asyncio.create_task(self.log_function(log_data))
+            else:
+                self.log_function(log_data)
+        except Exception as e:
+            # Catch all exceptions to ensure logging doesn't affect main program
+            logging.error(f"Error in logging function: {str(e)}")
     
-    async def _log_error(self, trace_id, method, path, query_params, headers, body, 
+    def _log_error(self, trace_id, method, path, query_params, headers, body, 
                  status_code, duration, ip, user_agent, cookies, error):
         """Log error information."""
         log_data = {
@@ -162,22 +192,32 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         if self.log_request_body and body:
             log_data["body"] = body
 
-        if asyncio.iscoroutinefunction(self.log_function):
-            await self.log_function(log_data)
-        else:
-            self.log_function(log_data)
+        try:
+            # Don't use await here - we want this to run without blocking
+            if asyncio.iscoroutinefunction(self.log_function):
+                # Create a task but don't wait for it
+                asyncio.create_task(self.log_function(log_data))
+            else:
+                self.log_function(log_data)
+        except Exception as e:
+            # Catch all exceptions to ensure logging doesn't affect main program
+            logging.error(f"Error in logging function: {str(e)}")
 
     def _default_log_function(self, log_data: Dict[str, Any]):
         """Default logging function that prints JSON to stdout."""
-        if self.log_format == "json":
-            print(json.dumps(log_data, indent=2))
-        else:
-            trace_id = log_data.get("trace_id")
-            method = log_data.get("method")
-            path = log_data.get("path")
-            status = log_data.get("status_code")
-            duration = log_data.get("duration_ms")
-            print(f"[trace_id: {trace_id}] [{trace_id}] {method} {path} - {status} ({duration}ms)")
+        try:
+            if self.log_format == "json":
+                print(json.dumps(log_data, indent=2))
+            else:
+                trace_id = log_data.get("trace_id")
+                method = log_data.get("method")
+                path = log_data.get("path")
+                status = log_data.get("status_code")
+                duration = log_data.get("duration_ms")
+                print(f"[trace_id: {trace_id}] [{trace_id}] {method} {path} - {status} ({duration}ms)")
+        except Exception as e:
+            # Catch all exceptions to ensure logging doesn't affect main program
+            logging.error(f"Error in default log function: {str(e)}")
 
 
 class SimpleLogger:
