@@ -29,17 +29,17 @@ def send_to_api(message: str, trace_id: Optional[str] = None, log_type: str = "p
     try:
         # Create payload
         trace_id = trace_id or "default"
+        current_time = time.time()  # Get current epoch timestamp
         payload = {
-            "data": json.dumps({
+            "data": {
                 "messages": [{
                     "message": message,
                     "type": log_type,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": current_time
                 }],
                 "trace_id": trace_id,
-                "type": "single",
-                "timestamp": datetime.now().isoformat()
-            })
+                "timestamp": current_time
+            }
         }
         
         # Send in a separate thread without waiting

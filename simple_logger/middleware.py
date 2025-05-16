@@ -25,6 +25,10 @@ def api_log_function(log_data: Dict[str, Any]):
             async def _send():
                 try:
                     async with aiohttp.ClientSession() as session:
+                        # Add timestamp to log data if not present
+                        if "timestamp" not in log_data:
+                            log_data["timestamp"] = time.time()
+                            
                         payload = {"data": log_data}
                         try:
                             async with session.post(
@@ -146,6 +150,7 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
             "duration_ms": duration,
             "ip": ip,
             "user_agent": user_agent,
+            "timestamp": time.time()
         }
 
         if self.log_headers:
@@ -180,7 +185,8 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
             "duration_ms": duration,
             "ip": ip,
             "user_agent": user_agent,
-            "error": error
+            "error": error,
+            "timestamp": time.time()
         }
 
         if self.log_headers:
