@@ -30,15 +30,20 @@ def send_to_api(message: str, trace_id: Optional[str] = None, log_type: str = "p
         # Create payload
         trace_id = trace_id or "default"
         current_time = time.time()  # Get current epoch timestamp
+        
+        # Create log message with the new format
+        message_obj = {
+            "message": message,
+            "type": log_type,
+            "level": log_level,
+            "timestamp": current_time
+        }
+        
         payload = {
             "data": {
-                "messages": [{
-                    "message": message,
-                    "type": log_type,
-                    "level": log_level,
-                    "timestamp": current_time
-                }],
+                "type": "LOG",
                 "trace_id": trace_id,
+                "messages": [message_obj],
                 "timestamp": current_time
             }
         }

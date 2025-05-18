@@ -25,11 +25,13 @@ def api_log_function(log_data: Dict[str, Any]):
             async def _send():
                 try:
                     async with aiohttp.ClientSession() as session:
-                        # Add timestamp to log data if not present
+                        # Add timestamp if not present
                         if "timestamp" not in log_data:
                             log_data["timestamp"] = time.time()
                             
+                        # Create the payload structure
                         payload = {"data": log_data}
+                        
                         try:
                             async with session.post(
                                 "http://0.0.0.0:8080",
@@ -141,8 +143,10 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
         status_code, duration, ip, user_agent, cookies
     ):
         """Log the request information using the configured log function."""
-        log_data = {
-            "trace_id": trace_id,
+        current_time = time.time()
+        
+        # Create the request data object
+        request_data = {
             "method": method,
             "path": path,
             "query_params": query_params,
@@ -150,18 +154,26 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
             "duration_ms": duration,
             "ip": ip,
             "user_agent": user_agent,
-            "timestamp": time.time(),
+            "timestamp": current_time,
             "level": "INFO"
         }
 
         if self.log_headers:
-            log_data["headers"] = headers
+            request_data["headers"] = headers
 
         if self.log_cookies:
-            log_data["cookies"] = cookies
+            request_data["cookies"] = cookies
 
         if self.log_request_body and body:
-            log_data["body"] = body
+            request_data["body"] = body
+
+        # Create the payload with the new nested structure
+        log_data = {
+            "type": "REQUEST",
+            "trace_id": trace_id,
+            "request": request_data,
+            "timestamp": current_time
+        }
 
         try:
             # Don't use await here - we want this to run without blocking
@@ -177,8 +189,10 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
     def _log_error(self, trace_id, method, path, query_params, headers, body, 
                  status_code, duration, ip, user_agent, cookies, error):
         """Log error information."""
-        log_data = {
-            "trace_id": trace_id,
+        current_time = time.time()
+        
+        # Create the request data object with error information
+        request_data = {
             "method": method,
             "path": path,
             "query_params": query_params,
@@ -187,18 +201,26 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
             "ip": ip,
             "user_agent": user_agent,
             "error": error,
-            "timestamp": time.time(),
+            "timestamp": current_time,
             "level": "ERROR"
         }
 
         if self.log_headers:
-            log_data["headers"] = headers
+            request_data["headers"] = headers
 
         if self.log_cookies:
-            log_data["cookies"] = cookies
+            request_data["cookies"] = cookies
 
         if self.log_request_body and body:
-            log_data["body"] = body
+            request_data["body"] = body
+
+        # Create the payload with the new nested structure
+        log_data = {
+            "type": "REQUEST",
+            "trace_id": trace_id,
+            "request": request_data,
+            "timestamp": current_time
+        }
 
         try:
             # Don't use await here - we want this to run without blocking
