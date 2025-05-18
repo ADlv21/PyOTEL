@@ -24,7 +24,7 @@ middleware_active = contextvars.ContextVar("middleware_active", default=False)
 # Store the original print function
 original_print = builtins.print
 
-def send_to_api(message: str, trace_id: Optional[str] = None, log_type: str = "print"):
+def send_to_api(message: str, trace_id: Optional[str] = None, log_type: str = "print", log_level: str = "INFO"):
     """Send a message to the API endpoint without waiting for response."""
     try:
         # Create payload
@@ -35,6 +35,7 @@ def send_to_api(message: str, trace_id: Optional[str] = None, log_type: str = "p
                 "messages": [{
                     "message": message,
                     "type": log_type,
+                    "level": log_level,
                     "timestamp": current_time
                 }],
                 "trace_id": trace_id,
@@ -73,7 +74,16 @@ class APILogHandler(logging.Handler):
         try:
             trace_id = trace_id_var.get()
             message = self.format(record)
-            send_to_api(message, trace_id, "log")
+            # Map Python log levels to standard log levels
+            level_map = {
+                logging.DEBUG: "DEBUG",
+                logging.INFO: "INFO", 
+                logging.WARNING: "WARN",
+                logging.ERROR: "ERROR",
+                logging.CRITICAL: "FATAL"
+            }
+            log_level = level_map.get(record.levelno, "INFO")
+            send_to_api(message, trace_id, "log", log_level)
         except Exception as e:
             logging.error(f"Error in APILogHandler: {str(e)}")
             self.handleError(record)
@@ -84,6 +94,9 @@ def traced_print(*args, **kwargs):
         trace_id = trace_id_var.get()
         message = " ".join(str(arg) for arg in args)
         
+        # Extract log level if provided in kwargs
+        log_level = kwargs.pop("log_level", "INFO")
+        
         # Print to console
         if trace_id:
             original_print(f"[trace_id: {trace_id}]", *args, **kwargs)
@@ -91,7 +104,7 @@ def traced_print(*args, **kwargs):
             original_print(*args, **kwargs)
         
         # Send to API without waiting
-        send_to_api(message, trace_id, "print")
+        send_to_api(message, trace_id, "print", log_level)
     except Exception as e:
         # Ensure print never fails
         original_print(*args, **kwargs)

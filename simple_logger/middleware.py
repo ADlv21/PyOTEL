@@ -150,7 +150,8 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
             "duration_ms": duration,
             "ip": ip,
             "user_agent": user_agent,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "level": "INFO"
         }
 
         if self.log_headers:
@@ -186,7 +187,8 @@ class SimpleLoggerMiddleware(BaseHTTPMiddleware):
             "ip": ip,
             "user_agent": user_agent,
             "error": error,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "level": "ERROR"
         }
 
         if self.log_headers:

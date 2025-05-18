@@ -24,7 +24,9 @@ app = SimpleLogger()(app)
 def root():
     logger.info('Started')
     logger.error('Finished')
-    print("Inside root endpoint")  # This print will include the trace ID
+    print("Inside root endpoint")  # This print will include the trace ID with default INFO level
+    print("Debug message", log_level="DEBUG")  # This will use DEBUG level
+    print("Warning message", log_level="WARN")  # This will use WARN level
     return {"message": "Hello World"}
 
 if __name__ == "__main__":
